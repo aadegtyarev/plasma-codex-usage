@@ -1,0 +1,16 @@
+Source: plasma-codex-usage
+Section: kde
+Priority: optional
+Maintainer: Alexander Degtyarev <adegtyarev.ap@gmail.com>
+Build-Depends: debhelper-compat (= 13), gettext, python3
+Standards-Version: 4.6.2
+Homepage: https://github.com/aadegtyarev/plasma-codex-usage
+Rules-Requires-Root: no
+
+Package: plasma-codex-usage
+Architecture: all
+Depends: ${misc:Depends}, python3 (>= 3.10), plasma-framework
+Description: Plasma panel widget with the remaining OpenAI Codex limit
+ Shows how much of the OpenAI Codex subscription limit is left, as reported
+ by the Codex CLI (codex app-server), and when it resets. The Codex CLI is
+ not packaged here: install it with npm and log in with "codex login".

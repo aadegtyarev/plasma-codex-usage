@@ -1,0 +1,25 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Alexander Degtyarev"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Remaining OpenAI Codex subscription limit",
+        "Description[ru]": "Остаток лимита подписки OpenAI Codex",
+        "Icon": "speedometer",
+        "Id": "io.github.plasma-codex-usage",
+        "License": "MIT",
+        "Name": "Codex Usage",
+        "Name[ru]": "Лимит Codex",
+        "ServiceTypes": [
+            "Plasma/Applet"
+        ],
+        "Version": "0.1.0",
+        "Website": "https://github.com/aadegtyarev/plasma-codex-usage"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API": "declarativeappletscript",
+    "X-Plasma-MainScript": "ui/main.qml"
+}

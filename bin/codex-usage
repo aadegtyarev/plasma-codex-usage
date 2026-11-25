@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Prints the remaining OpenAI Codex subscription limit as one line of JSON.
+
+The numbers come from the Codex CLI itself (`codex app-server`, method
+`account/rateLimits/read`), so its login and token refresh are reused as is.
+Errors are printed as {"error": <code>} and turned into text by the widget,
+which owns all user-facing strings and their translations.
+"""
+
+import json
+import subprocess
+import sys
+import threading
+
+TIMEOUT_S = 20
+CLIENT_INFO = {"name": "plasma-codex-usage", "version": "1"}
+
+
+class UsageError(Exception):
+    def __init__(self, code, detail=None):
+        super().__init__(code if detail is None else f"{code}: {detail}")
+        self.code = code
+        self.detail = detail
+
+    def as_json(self):
+        output = {"error": self.code}
+        if self.detail is not None:
+            output["detail"] = self.detail
+        return output
+
+
+def read_rate_limits(codex="codex", timeout=TIMEOUT_S):
+    try:
+        proc = subprocess.Popen(
+            [codex, "app-server"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except FileNotFoundError:
+        raise UsageError("codex_not_found")
+
+    timed_out = threading.Event()
+
+    def kill_hung():
+        timed_out.set()
+        proc.kill()
+
+    # Killing a hung app-server closes its stdout, which ends the read loop in _call.
+    watchdog = threading.Timer(timeout, kill_hung)
+    watchdog.start()
+    try:
+        _call(proc, 1, "initialize", {"clientInfo": CLIENT_INFO})
+        _send(proc, {"method": "initialized"})
+        return _call(proc, 2, "account/rateLimits/read")
+    except EOFError:
+        raise UsageError("timeout" if timed_out.is_set() else "no_answer")
+    finally:
+        watchdog.cancel()
+        _stop(proc)
+
+
+def _send(proc, message):
+    try:
+        proc.stdin.write(json.dumps(message) + "\n")
+        proc.stdin.flush()
+    except BrokenPipeError:
+        raise EOFError
+
+
+def _call(proc, request_id, method, params=None):
+    request = {"id": request_id, "method": method}
+    if params is not None:
+        request["params"] = params
+    _send(proc, request)
+    for line in proc.stdout:
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if message.get("id") != request_id:
+            continue
+        if "error" in message:
+            raise _rpc_error(message["error"])
+        return message.get("result") or {}
+    raise EOFError
+
+
+def _rpc_error(error):
+    text = str(error.get("message") or error)
+    if "authentication" in text.lower():
+        return UsageError("not_logged_in")
+    return UsageError("codex_error", text)
+
+
+def _stop(proc):
+    try:
+        proc.stdin.close()
+    except BrokenPipeError:
+        pass
+    try:
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+    proc.stdout.close()
+
+
+def summarize(result):
+    limits = result.get("rateLimits") or {}
+    windows = [w for w in (limits.get("primary"), limits.get("secondary")) if w]
+    if not windows:
+        raise UsageError("no_limits")
+    # With both a short and a long window the one closer to running out is the one that blocks work.
+    binding = max(windows, key=lambda w: w.get("usedPercent") or 0)
+    used = float(binding.get("usedPercent") or 0)
+    return {
+        "remainingPercent": max(0, min(100, int(100 - used))),
+        "windowMinutes": binding.get("windowDurationMins"),
+        "resetsAt": binding.get("resetsAt"),
+        "freeResets": (result.get("rateLimitResetCredits") or {}).get("availableCount") or 0,
+    }
+
+
+def main():
+    try:
+        output, status = summarize(read_rate_limits()), 0
+    except UsageError as e:
+        output, status = e.as_json(), 1
+    print(json.dumps(output, ensure_ascii=False))
+    return status
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,54 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  deb:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential debhelper devscripts gettext python3 qtdeclarative5-dev-tools
+
+      - name: Lint QML
+        run: qmllint plasmoid/contents/ui/*.qml
+
+      - name: Set version
+        env:
+          DEBEMAIL: ci@github
+          DEBFULLNAME: GitHub CI
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="$(dpkg-parsechangelog -S Version)+git$(date -u +%Y%m%d%H%M).$(git rev-parse --short HEAD)"
+          fi
+          [ "$V" = "$(dpkg-parsechangelog -S Version)" ] || \
+            dch --newversion "$V" --distribution noble --force-distribution "CI build of $GITHUB_SHA"
+          sed -i "s/\"Version\": \".*\"/\"Version\": \"$V\"/" plasmoid/metadata.json
+
+      - name: Build
+        run: dpkg-buildpackage -us -uc -b
+
+      - name: Collect
+        run: mkdir dist && mv ../*.deb dist/ && ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.deb --title "$GITHUB_REF_NAME" --generate-notes

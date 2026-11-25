@@ -1,0 +1,4 @@
+bin/codex-usage usr/bin/
+plasmoid/metadata.json usr/share/plasma/plasmoids/io.github.plasma-codex-usage/
+plasmoid/contents usr/share/plasma/plasmoids/io.github.plasma-codex-usage/
+build/locale usr/share/

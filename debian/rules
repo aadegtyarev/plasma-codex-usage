@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+
+DOMAIN := plasma_applet_io.github.plasma-codex-usage
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	for po in po/*.po; do \
+		lang=$$(basename $$po .po); \
+		mkdir -p build/locale/$$lang/LC_MESSAGES; \
+		msgfmt --check -o build/locale/$$lang/LC_MESSAGES/$(DOMAIN).mo $$po; \
+	done
+
+override_dh_auto_test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+
+override_dh_auto_clean:
+	rm -rf build
